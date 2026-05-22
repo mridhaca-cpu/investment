@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - IP Logs with Google Maps</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-gray-50 font-sans antialiased text-gray-800">
+
+    <div class="min-h-screen flex flex-col">
+        <header class="bg-white border-b border-gray-200 sticky top-0 z-10">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="bg-emerald-500 text-white p-2 rounded-lg font-bold text-sm tracking-wider">SUPA</div>
+                    <h1 class="text-xl font-bold text-gray-900 tracking-tight">IP Logs Geo-Tracker</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button onclick="fetchIpLogs()" class="cursor-pointer inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg shadow-xs hover:bg-gray-50 transition-all duration-200">
+                        🔄 Refresh Data
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+            <div class="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-white p-6 rounded-xl border border-gray-200 shadow-xs">
+                    <p class="text-sm font-medium text-gray-500 uppercase tracking-wider">Total IP Records</p>
+                    <p id="total-count" class="mt-2 text-3xl font-bold text-gray-900">Loading...</p>
+                    <p class="text-xs text-gray-400 mt-1">💡 Click any IP Address to pin it on Google Maps.</p>
+                </div>
+            </div>
+
+            <div class="bg-white border border-gray-200 rounded-xl shadow-xs overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-200 bg-gray-50/50">
+                    <h2 class="font-semibold text-gray-800">Active Network IP Logs</h2>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-200">
+                                <th class="px-6 py-3 w-24">ID</th>
+                                <th class="px-6 py-3">IP Address (Click to Track)</th>
+                                <th class="px-6 py-3">Created At</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logs-table-body" class="divide-y divide-gray-200 text-sm">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="geo-modal" class="hidden fixed inset-0 z-50 bg-gray-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl border border-gray-200 max-w-2xl w-full overflow-hidden flex flex-col transform transition-all">
+            <div class="px-6 py-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+                <div>
+                    <h3 class="text-lg font-bold text-gray-900">IP Location Details</h3>
+                    <p id="modal-ip-title" class="text-sm text-emerald-600 font-mono font-medium"></p>
+                </div>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 font-bold text-xl cursor-pointer p-1">&times;</button>
+            </div>
+            
+            <div class="p-6 space-y-4 flex-1">
+                <div id="modal-details" class="grid grid-cols-2 gap-4 text-sm bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <div>
+                        <span class="block text-xs font-medium text-gray-400 uppercase">Country</span>
+                        <span id="geo-country" class="font-medium text-gray-900">-</span>
+                    </div>
+                    <div>
+                        <span class="block text-xs font-medium text-gray-400 uppercase">City / Region</span>
+                        <span id="geo-city" class="font-medium text-gray-900">-</span>
+                    </div>
+                    <div>
+                        <span class="block text-xs font-medium text-gray-400 uppercase">ISP Provider</span>
+                        <span id="geo-isp" class="font-medium text-gray-900">-</span>
+                    </div>
+                    <div>
+                        <span class="block text-xs font-medium text-gray-400 uppercase">Coordinates</span>
+                        <span id="geo-coords" class="font-mono text-gray-900">-</span>
+                    </div>
+                </div>
+
+                <div class="border border-gray-200 rounded-lg overflow-hidden shadow-inner h-64 w-full bg-gray-100" id="map-container">
+                    </div>
+            </div>
+
+            <div class="px-6 py-3 bg-gray-50 border-t border-gray-200 flex justify-end">
+                <button onclick="closeModal()" class="cursor-pointer bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-all">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://exajhhhirwxhkgtneolo.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV4YWpoaGhpcnd4aGtndG5lb2xvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NTEwNTAsImV4cCI6MjA5NTAyNzA1MH0.rfuxeE1VIi0ciFJj8Tj0-LSwC0A_h8hTv8ET8tfn03w';
+        
+        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // Fetch DB Records on init
+        async function fetchIpLogs() {
+            const tableBody = document.getElementById('logs-table-body');
+            const totalCountEl = document.getElementById('total-count');
+
+            try {
+                const { data, error } = await _supabase
+                    .from('ip_logs')
+                    .select('*')
+                    .order('id', { ascending: false });
+
+                if (error) throw error;
+                tableBody.innerHTML = '';
+                totalCountEl.textContent = data.length;
+
+                if (data.length === 0) {
+                    tableBody.innerHTML = `<tr><td colspan="3" class="px-6 py-8 text-center text-gray-400">No logs found.</td></tr>`;
+                    return;
+                }
+
+                data.forEach(log => {
+                    const dateFormatted = new Date(log.created_at).toLocaleString();
+                    const row = `
+                        <tr class="hover:bg-gray-50/70 transition-colors">
+                            <td class="px-6 py-4 font-mono font-semibold text-gray-500">${log.id}</td>
+                            <td class="px-6 py-4">
+                                <button onclick="openGeoModal('${log.ip_address}')" class="group cursor-pointer font-mono inline-flex items-center space-x-2 bg-emerald-50 text-emerald-800 px-2.5 py-1 rounded-md border border-emerald-200/60 hover:bg-emerald-600 hover:text-white hover:border-emerald-700 transition-all duration-150">
+                                    <span>${log.ip_address}</span>
+                                    <span class="text-xs opacity-60 group-hover:opacity-100">📍 Map View</span>
+                                </button>
+                            </td>
+                            <td class="px-6 py-4 text-gray-500">${dateFormatted}</td>
+                        </tr>
+                    `;
+                    tableBody.insertAdjacentHTML('beforeend', row);
+                });
+
+            } catch (err) {
+                console.error("Error:", err);
+                totalCountEl.textContent = "Error";
+                tableBody.innerHTML = `<tr><td colspan="3" class="px-6 py-8 text-center text-red-500 bg-red-50/50"><strong>Error:</strong> ${err.message}</td></tr>`;
+            }
+        }
+
+        // Logic to retrieve Geo IP and update Google Map iframe
+        async function openGeoModal(ipAddress) {
+            document.getElementById('modal-ip-title').textContent = `Target IP: ${ipAddress}`;
+            document.getElementById('geo-country').textContent = "Loading...";
+            document.getElementById('geo-city').textContent = "Loading...";
+            document.getElementById('geo-isp').textContent = "Loading...";
+            document.getElementById('geo-coords').textContent = "Loading...";
+            document.getElementById('map-container').innerHTML = '<div class="h-full flex items-center justify-center text-gray-400 text-sm animate-pulse">Loading Google Map...</div>';
+            
+            // Show Modal
+            document.getElementById('geo-modal').classList.remove('hidden');
+
+            let lat = 0;
+            let lon = 0;
+
+            try {
+                // If it is a standard public IP, fetch geolocation details
+                if (!ipAddress.startsWith('127.') && !ipAddress.startsWith('192.168.')) {
+                    const res = await fetch(`http://ip-api.com/json/${ipAddress}`);
+                    const geo = await res.json();
+                    
+                    if (geo.status === "fail") throw new Error(geo.message);
+
+                    lat = geo.lat;
+                    lon = geo.lon;
+
+                    document.getElementById('geo-country').textContent = geo.country || "Unknown";
+                    document.getElementById('geo-city').textContent = `${geo.city || ''}, ${geo.regionName || ''}`;
+                    document.getElementById('geo-isp').textContent = geo.isp || "Unknown";
+                    document.getElementById('geo-coords').textContent = `${lat}, ${lon}`;
+                } else {
+                    // Local private IP fallback fallback simulation values
+                    lat = 40.7128; lon = -74.0060;
+                    document.getElementById('geo-country').textContent = "Private/Local Network IP";
+                    document.getElementById('geo-city').textContent = "Default View (New York)";
+                    document.getElementById('geo-isp').textContent = "Internal LAN Router";
+                    document.getElementById('geo-coords').textContent = `${lat}, ${lon}`;
+                }
+
+                // Inject Google Maps Iframe using embed coordinates
+                const mapContainer = document.getElementById('map-container');
+                mapContainer.innerHTML = `
+                    <iframe 
+                        width="100%" 
+                        height="100%" 
+                        frameborder="0" 
+                        style="border:0" 
+                        src="https://maps.google.com/maps?q=${lat},${lon}&t=&z=14&ie=UTF8&iwloc=&output=embed" 
+                        allowfullscreen>
+                    </iframe>`;
+
+            } catch (error) {
+                console.error("Geo lookup error:", error);
+                document.getElementById('geo-country').textContent = "Lookup Failed";
+                document.getElementById('map-container').innerHTML = '<div class="h-full flex items-center justify-center text-red-500 text-sm">Failed to generate map for this IP.</div>';
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('geo-modal').classList.add('hidden');
+            // Clear map frame memory on close
+            document.getElementById('map-container').innerHTML = '';
+        }
+
+        document.addEventListener('DOMContentLoaded', fetchIpLogs);
+    </script>
+</body>
+</html>
